@@ -1,4 +1,6 @@
 add_subdirectory(fst)
+add_subdirectory(fmt)
+add_subdirectory(spdlog)
 add_subdirectory(rapidjson-1.1)
 ###############################################################################
 # build tlm-interfaces

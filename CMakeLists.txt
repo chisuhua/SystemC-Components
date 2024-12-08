@@ -74,6 +74,8 @@ endif()
 if(BUILD_SCC_DOCUMENTATION)
     add_subdirectory(doc)
 endif()
+
+set(CMAKE_INSTALL_LIBDIR lib)
 set(SCC_CMAKE_CONFIG_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/scc)
 
 
@@ -119,6 +121,7 @@ endif()
 
 find_package(Boost 1.70 REQUIRED COMPONENTS system date_time) # header only libraries must not be added here
 find_package(lz4 QUIET)
+
 if(NOT ${lz4_FOUND})
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
