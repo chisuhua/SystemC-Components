@@ -74,6 +74,37 @@ struct char_hash {
         return hash;
     }
 };
+#ifdef MTContext
+struct Lut {
+    std::unordered_map<char const*, sc_core::sc_verbosity, char_hash, char_equal_to> table;
+    std::vector<std::string> cache;
+    void insert(char const* key, sc_core::sc_verbosity verb) {
+        cache.push_back(key);
+        table.insert({cache.back().c_str(), verb});
+    }
+    void clear() {
+        table.clear();
+        cache.clear();
+    }
+    static std::map<sc_simcontext*, Lut*> active;
+    static std::mutex mutex;
+    static Lut& Get() {
+      std::lock_guard<std::mutex> lock(mutex);
+      sc_simcontext* ctx = sc_core::sc_get_curr_simcontext();
+      auto it = active.find(ctx);
+      if (it == active.end())  {
+        active.insert({ctx,new Lut});
+        it = active.find(ctx);
+      }
+      return *(it->second);
+    }
+};
+
+std::map<sc_simcontext*, Lut*> Lut::active;
+std::mutex Lut::mutex;
+
+#define lut Lut::Get()
+#else
 thread_local struct {
     std::unordered_map<char const*, sc_core::sc_verbosity, char_hash, char_equal_to> table;
     std::vector<std::string> cache;
@@ -86,15 +117,44 @@ thread_local struct {
         cache.clear();
     }
 } lut;
+#endif
+
 #ifdef MTI_SYSTEMC
 static const cci::cci_originator originator;
 #else
 static const cci::cci_originator originator("reporting");
 #endif
 
+#ifdef MTContext
+bool& sc_stop_called() {
+    static std::map<sc_simcontext*, bool> active;
+    static bool active_default = false;
+    sc_simcontext* ctx = sc_get_curr_simcontext();
+    auto it = active.find(ctx);
+    if (it == active.end()) {
+        active.insert({ctx, active_default});
+        return active_default;
+    }
+    return it->second;
+}
+#else
+#endif
+
 bool& inst_based_logging() {
+#ifdef MTContext
+    static std::map<sc_simcontext*, bool> active;
+    static bool active_default = getenv("SCC_DISABLE_INSTANCE_BASED_LOGGING") == nullptr;
+    sc_simcontext* ctx = sc_get_curr_simcontext();
+    auto it = active.find(ctx);
+    if (it == active.end()) {
+      active.insert({ctx, active_default});
+      return active_default;
+    }
+    return it->second;
+#else
     thread_local bool active = getenv("SCC_DISABLE_INSTANCE_BASED_LOGGING") == nullptr;
     return active;
+#endif
 }
 
 struct ExtLogConfig : public scc::LogConfig {
@@ -120,7 +180,26 @@ struct ExtLogConfig : public scc::LogConfig {
     bool initialized{false};
 };
 
+#ifdef MTContext
+class LogCfg {
+public:
+    static ExtLogConfig& Get() {
+        sc_simcontext* ctx = sc_core::sc_get_curr_simcontext();
+        auto it = m_logcfg.find(ctx); 
+        if (it == m_logcfg.end()) {
+            auto ctx_logcfg = new ExtLogConfig();
+            m_logcfg.insert({ctx, ctx_logcfg});
+            return *ctx_logcfg;
+        }
+        return *(it->second);
+    }
+    static std::map<sc_simcontext*, ExtLogConfig*> m_logcfg;
+};
+std::map<sc_simcontext*, ExtLogConfig*> LogCfg::m_logcfg;
+#define log_cfg LogCfg::Get()
+#else
 thread_local ExtLogConfig log_cfg;
+#endif
 
 auto get_tuple(const sc_time& t) -> tuple<sc_time::value_type, sc_time_unit> {
     auto val = t.value();
@@ -275,7 +354,9 @@ inline void log2logger(spdlog::logger& logger, scc::log lvl, const string& msg) 
 }
 
 void report_handler(const sc_report& rep, const sc_actions& actions) {
+#ifndef MTContext
     thread_local bool sc_stop_called = false;
+#endif
     if(actions & SC_DO_NOTHING)
         return;
     if(rep.get_severity() == sc_core::SC_INFO || !log_cfg.report_only_first_error || sc_report_handler::get_count(SC_ERROR) < 2) {
@@ -291,9 +372,9 @@ void report_handler(const sc_report& rep, const sc_actions& actions) {
     }
     if(actions & SC_STOP) {
         this_thread::sleep_for(chrono::milliseconds(static_cast<unsigned>(log_cfg.level) * 10));
-        if(sc_is_running() && !sc_stop_called) {
+        if(sc_is_running() && !sc_stop_called()) {
             sc_stop();
-            sc_stop_called = true;
+            sc_stop_called() = true;
         }
     }
     if(actions & SC_ABORT) {

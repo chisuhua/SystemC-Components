@@ -81,7 +81,11 @@ public:
 
 private:
     static std::mt19937_64& inst() {
+    #ifdef MTContext
+        static std::mt19937_64 rng;
+    #else
         static thread_local std::mt19937_64 rng;
+    #endif
         return rng;
     }
 };

@@ -192,8 +192,19 @@ template <typename SIG = bool> struct tlm_signal_gp : public tlm_generic_payload
     };
 
     static tlm_signal_gp<SIG>* create() {
+    #ifdef MTContext
+        static std::map<sc_core::sc_simcontext*, gp_mm*> active;
+        sc_core::sc_simcontext* ctx = sc_core::sc_get_curr_simcontext();
+        auto it = active.find(ctx);
+        if (it == active.end()) {
+            active.insert({ctx, new gp_mm});
+            return active[ctx];
+        }
+        return it->second->create();
+    #else
         static thread_local gp_mm mm;
         return mm.create();
+    #endif
     }
 
 protected:

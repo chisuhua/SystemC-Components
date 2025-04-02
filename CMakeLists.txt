@@ -152,6 +152,7 @@ if(NOT TARGET lz4::lz4)
     add_subdirectory(third_party/lz4-1.9.4)
 endif()
 
+add_compile_definitions(MTContext)
 ###############################################################################
 # subdirectories
 ###############################################################################

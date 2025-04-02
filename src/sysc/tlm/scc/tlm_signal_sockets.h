@@ -20,6 +20,7 @@
 #include "scc/report.h"
 
 #include <sysc/kernel/sc_object.h>
+#include <sysc/utils/sc_typeindex.h>
 #ifdef CWR_SYSTEMC
 #include <tlm_h/tlm_sockets/tlm_initiator_socket.h>
 #include <tlm_h/tlm_sockets/tlm_target_socket.h>

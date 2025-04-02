@@ -169,8 +169,19 @@ public:
 };
 
 template <size_t ELEM_SIZE, unsigned CHUNK_SIZE> pool_allocator<ELEM_SIZE, CHUNK_SIZE>& pool_allocator<ELEM_SIZE, CHUNK_SIZE>::get() {
-    thread_local pool_allocator inst;
-    return inst;
+    #ifdef MTContext
+        static std::map<sc_core::sc_simcontext*, pool_allocator*> active;
+        sc_core::sc_simcontext* ctx = sc_core::sc_get_curr_simcontext();
+        auto it = active.find(ctx);
+        if (it == active.end()) {
+            active.insert({ctx, new pool_allocator});
+            return *(active[ctx]);
+        }
+        return *(it->second);
+    #else
+      thread_local pool_allocator inst;
+      return inst;
+    #endif
 }
 
 template <size_t ELEM_SIZE, unsigned CHUNK_SIZE> pool_allocator<ELEM_SIZE, CHUNK_SIZE>::~pool_allocator() {
